@@ -142,7 +142,7 @@ function registeredSurfaceSummary(geometry: VehicleAeroGeometry, componentId: st
   if (!matches.length) return null
   const average = (axis: 0 | 1 | 2) => matches.reduce((sum, surface) => sum + surface.anchor[axis], 0) / matches.length
   return {
-    anchor: [rounded(average(0)), rounded(average(1)), rounded(average(2))] as AeroPoint,
+    anchor: [average(0), average(1), average(2)] as AeroPoint,
     span: Math.max(...matches.map((surface) => surface.interactionRadius * 2)),
   }
 }

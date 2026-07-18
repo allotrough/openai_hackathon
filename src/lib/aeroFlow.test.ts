@@ -102,4 +102,39 @@ describe('component-aware aerodynamic flow plan', () => {
       streamline.componentIds.includes('sidepod-inlets')
     ))).toBe(true)
   })
+
+  it('uses colliders that match rendered GT wings and class-specific Formula/monster bodywork', () => {
+    const gtSpec = {
+      ...compileIntent('Design a track-focused GT with a substantial front splitter, rear wing, and diffuser.'),
+      vehicleClass: 'gt' as const,
+      frontWing: 0.62,
+      rearWing: 0.72,
+    }
+    const gt = buildVehicleAeroGeometry(gtSpec)
+    const formula = buildVehicleAeroGeometry(compileIntent('Design a modern Formula 1 car with floor tunnels and rear wing.'))
+    const monster = buildVehicleAeroGeometry(compileIntent('Build a high-clearance monster truck with a tube-frame cab and exposed engine.'))
+
+    expect(gt.surfaces.map((surface) => surface.componentId)).toEqual(expect.arrayContaining([
+      'front-aero-wing', 'rear-aero-wing',
+    ]))
+    expect(formula.surfaces.some((surface) => surface.collider.shape === 'profile-prism')).toBe(false)
+    expect(formula.surfaces.map((surface) => surface.componentId)).toEqual(expect.arrayContaining([
+      'formula-nose-and-crash-structure', 'formula-central-chassis', 'formula-engine-cover',
+    ]))
+    expect(monster.surfaces.some((surface) => surface.collider.shape === 'profile-prism')).toBe(false)
+    expect(monster.surfaces.map((surface) => surface.componentId)).toEqual(expect.arrayContaining([
+      'tube-frame-safety-cage', 'engine-and-cooling-module', 'cargo-bed',
+    ]))
+  })
+
+  it('grounds component cues on matching registry surfaces when one is available', () => {
+    const spec = compileIntent('Design a modern Formula 1 car with a multi-element front wing and ground-effect floor.')
+    const geometry = buildVehicleAeroGeometry(spec)
+    const plan = buildAeroFlowPlan(spec)
+    const frontWing = geometry.surfaces.find((surface) => surface.componentId === 'front-wing-mainplane')!
+    const influence = plan.componentInfluences.find((entry) => entry.componentId === 'front-wing-mainplane')!
+
+    expect(influence.anchor).toEqual(frontWing.anchor)
+    expect(influence.span).toBeGreaterThanOrEqual(frontWing.interactionRadius * 2)
+  })
 })

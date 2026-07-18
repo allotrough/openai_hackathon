@@ -5,8 +5,8 @@ import type { Group, Mesh } from 'three'
 import { Color, ExtrudeGeometry, MathUtils, Quaternion, Shape, Vector3 } from 'three'
 import type { VehicleSpec, ViewMode } from '../types'
 import {
-  buildAeroFlowPlan,
   type AeroFlowFamily,
+  type AeroFlowPlan,
   type AeroPressureZone,
   type AeroStreamline,
   type AeroWakeZone,
@@ -18,6 +18,7 @@ type ViewportProps = {
   viewMode: ViewMode
   exploded: boolean
   airflow: boolean
+  aeroPlan: AeroFlowPlan | null
   resetToken: number
 }
 
@@ -1111,9 +1112,8 @@ function WakeCues({ zones }: { zones: readonly AeroWakeZone[] }) {
   )
 }
 
-function FlowField({ spec, visible }: { spec: VehicleSpec; visible: boolean }) {
-  const plan = useMemo(() => buildAeroFlowPlan(spec), [spec])
-  if (!visible) return null
+function FlowField({ plan, visible }: { plan: AeroFlowPlan | null; visible: boolean }) {
+  if (!visible || !plan) return null
   return (
     <group name="surface-flow-v2-estimate-not-cfd">
       <WakeCues zones={plan.wakeZones} />
@@ -1124,7 +1124,19 @@ function FlowField({ spec, visible }: { spec: VehicleSpec; visible: boolean }) {
   )
 }
 
-function ProceduralVehicle({ spec, mode, exploded, airflow }: { spec: VehicleSpec; mode: ViewMode; exploded: boolean; airflow: boolean }) {
+function ProceduralVehicle({
+  spec,
+  mode,
+  exploded,
+  airflow,
+  aeroPlan,
+}: {
+  spec: VehicleSpec
+  mode: ViewMode
+  exploded: boolean
+  airflow: boolean
+  aeroPlan: AeroFlowPlan | null
+}) {
   const profile = useMemo(() => getGeometryProfile(spec), [spec])
   const wheelX = spec.wheelbase / 2
   const frontZ = spec.frontTrack / 2
@@ -1234,7 +1246,7 @@ function ProceduralVehicle({ spec, mode, exploded, airflow }: { spec: VehicleSpe
       )}
 
       <StructuralFrame spec={spec} mode={mode} />
-      <FlowField spec={spec} visible={airflow} />
+      <FlowField plan={aeroPlan} visible={airflow && !exploded} />
     </group>
   )
 }
@@ -1258,7 +1270,7 @@ function StudioStage() {
   )
 }
 
-function Scene({ spec, viewMode, exploded, airflow, resetToken }: ViewportProps) {
+function Scene({ spec, viewMode, exploded, airflow, aeroPlan, resetToken }: ViewportProps) {
   const orbit = useRef<React.ElementRef<typeof OrbitControls>>(null)
   useEffect(() => {
     orbit.current?.reset()
@@ -1275,7 +1287,7 @@ function Scene({ spec, viewMode, exploded, airflow, resetToken }: ViewportProps)
       {!studio && <pointLight position={[-5, 3, -6]} color="#3ab4ff" intensity={1.1} />}
       {!studio && <pointLight position={[5, 2, 5]} color="#f0ad3d" intensity={0.6} />}
       {studio && <StudioStage />}
-      <ProceduralVehicle spec={spec} mode={viewMode} exploded={exploded} airflow={airflow} />
+      <ProceduralVehicle spec={spec} mode={viewMode} exploded={exploded} airflow={airflow} aeroPlan={aeroPlan} />
       {!studio && <Grid
         position={[0, 0, 0]}
         args={[26, 26]}
@@ -1294,7 +1306,7 @@ function Scene({ spec, viewMode, exploded, airflow, resetToken }: ViewportProps)
   )
 }
 
-export function VehicleViewport({ spec, viewMode, exploded, airflow, resetToken }: ViewportProps) {
+export function VehicleViewport({ spec, viewMode, exploded, airflow, aeroPlan, resetToken }: ViewportProps) {
   return (
     <Canvas
       className="vehicle-canvas"
@@ -1303,7 +1315,7 @@ export function VehicleViewport({ spec, viewMode, exploded, airflow, resetToken 
       camera={{ position: [7.4, 4.1, 7.4], fov: 42 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
     >
-      <Scene spec={spec} viewMode={viewMode} exploded={exploded} airflow={airflow} resetToken={resetToken} />
+      <Scene spec={spec} viewMode={viewMode} exploded={exploded} airflow={airflow} aeroPlan={aeroPlan} resetToken={resetToken} />
     </Canvas>
   )
 }

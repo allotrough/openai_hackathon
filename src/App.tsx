@@ -32,7 +32,7 @@ import { requestStudioRender } from './lib/studioRender'
 import { createGeometryReferenceImage } from './lib/vehicleReference'
 import { requestVisualCritique, type VisualFidelity } from './lib/visualCritic'
 import { createReferenceCatalogCache, formatReferenceResearchSummary, seedReferenceResearch } from './lib/referenceCatalog'
-import { buildAeroFlowPlan } from './lib/aeroFlow'
+import { buildAeroFlowPlan, type AeroFlowPlan } from './lib/aeroFlow'
 import type { ChatMessage, DesignRevision, IterationLog, VehicleSpec, ViewMode } from './types'
 
 const STORAGE_KEY = 'aether-vehicle-studio-v1'
@@ -150,10 +150,13 @@ export default function App() {
   const [photoRender, setPhotoRender] = useState<PhotoRender | null>(null)
   const [photoRendering, setPhotoRendering] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [aeroPlan, setAeroPlan] = useState<AeroFlowPlan | null>(null)
+  const [aeroPlanning, setAeroPlanning] = useState(false)
   const [questionBudget] = useState(0)
   const timerRef = useRef<number | null>(null)
   const noticeTimerRef = useRef<number | null>(null)
   const attachmentInput = useRef<HTMLInputElement>(null)
+  const aeroRequestRef = useRef(0)
 
   const active = history[activeIndex] ?? history.at(-1)!
   const finalLog = active.logs.at(-1)!
@@ -162,11 +165,49 @@ export default function App() {
   const liveTerra = import.meta.env.VITE_TERRA_LIVE === 'true'
   const activePhoto = photoRender?.revisionId === active.id ? photoRender : null
   const visiblePhoto = activePhoto && !activePhoto.withheld ? activePhoto : null
-  const aeroPlan = useMemo(() => buildAeroFlowPlan(active.spec), [active.spec])
+  const aeroVisible = airflow && !exploded && viewMode !== 'studio'
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, activeIndex, messages }))
   }, [history, activeIndex, messages])
+
+  useEffect(() => {
+    const requestId = ++aeroRequestRef.current
+    if (!aeroVisible) {
+      setAeroPlan(null)
+      setAeroPlanning(false)
+      return undefined
+    }
+
+    setAeroPlan(null)
+    setAeroPlanning(true)
+    let worker: Worker | null = null
+    let settled = false
+    const finishWithFallback = () => {
+      if (settled || requestId !== aeroRequestRef.current) return
+      settled = true
+      // A Worker is available in supported browsers. This narrow fallback
+      // keeps the estimate usable in constrained local preview environments.
+      setAeroPlan(buildAeroFlowPlan(active.spec))
+      setAeroPlanning(false)
+    }
+
+    try {
+      worker = new Worker(new URL('./workers/aeroFlowWorker.ts', import.meta.url), { type: 'module' })
+      worker.onmessage = ({ data }: MessageEvent<{ id: number; plan?: AeroFlowPlan }>) => {
+        if (data.id !== requestId || settled) return
+        settled = true
+        setAeroPlan(data.plan ?? null)
+        setAeroPlanning(false)
+      }
+      worker.onerror = finishWithFallback
+      worker.postMessage({ id: requestId, spec: active.spec })
+    } catch {
+      finishWithFallback()
+    }
+
+    return () => worker?.terminate()
+  }, [active.spec, aeroVisible])
 
   useEffect(() => {
     if (!processing) return undefined
@@ -430,7 +471,7 @@ export default function App() {
         </aside>
 
         <section className={`viewport-workspace ${processing ? 'is-generating' : ''} ${viewMode === 'studio' ? 'is-studio' : ''}`}>
-          <VehicleViewport key={active.id} spec={active.spec} viewMode={viewMode} exploded={exploded} airflow={airflow} resetToken={resetToken} />
+          <VehicleViewport key={active.id} spec={active.spec} viewMode={viewMode} exploded={exploded} airflow={aeroVisible} aeroPlan={aeroPlan} resetToken={resetToken} />
           <div className="viewport-ambient" />
           {viewMode === 'studio' && (
             <div className={`photo-render-layer ${visiblePhoto ? 'has-photo' : ''}`}>
@@ -469,7 +510,7 @@ export default function App() {
             <span>{viewMode === 'studio' ? 'CINEMATIC MATERIAL PREVIEW' : 'PROCEDURAL GEOMETRY'}</span>
           </div>
 
-          {airflow && viewMode !== 'studio' && (
+          {aeroPlan && (
             <aside className="aero-analysis-card" aria-live="polite">
               <div className="aero-analysis-heading"><span>COMPONENT AERO ESTIMATE</span><b>NOT CFD</b></div>
               <strong>{aeroPlan.componentInfluences.length} SYSTEMS <i>â€¢</i> {aeroPlan.streamlines.length} FLOW PATHS</strong>
@@ -485,6 +526,13 @@ export default function App() {
                 </div>
               </details>
               <small>Schema and component-graph estimate. Final aero decisions require meshed CFD and physical correlation.</small>
+            </aside>
+          )}
+          {aeroVisible && !aeroPlan && aeroPlanning && (
+            <aside className="aero-analysis-card" aria-live="polite">
+              <div className="aero-analysis-heading"><span>COMPONENT AERO ESTIMATE</span><b>NOT CFD</b></div>
+              <strong>TRACING SURFACES...</strong>
+              <small>Matching the active body, wheels, aero devices, and cooling surfaces before the live overlay appears.</small>
             </aside>
           )}
 
