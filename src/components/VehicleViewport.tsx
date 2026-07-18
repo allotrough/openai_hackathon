@@ -1270,6 +1270,30 @@ function StudioStage() {
   )
 }
 
+function EngineeringStage({ blueprint }: { blueprint: boolean }) {
+  // The tyre contact patch is y=0. Keep the physical stage below it so the
+  // floor, grid and contact shadows add depth without intersecting wheels,
+  // splitters, floor tunnels, or exploded components.
+  const floorY = -0.035
+  return (
+    <>
+      <mesh name="engineering-floor-clearance-y-minus-0-035" position={[0, floorY, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[34, 34]} />
+        <meshStandardMaterial color={blueprint ? '#06131c' : '#111820'} roughness={0.72} metalness={0.28} />
+      </mesh>
+      <mesh name="engineering-back-wall-clearance-z-minus-9" position={[0, 5.5, -9]} receiveShadow>
+        <planeGeometry args={[34, 13]} />
+        <meshStandardMaterial color={blueprint ? '#071720' : '#0d1219'} roughness={0.94} metalness={0.05} />
+      </mesh>
+      <ContactShadows position={[0, floorY + 0.009, 0]} opacity={blueprint ? 0.28 : 0.52} scale={15} blur={2.9} far={5.4} color="#000000" />
+      <hemisphereLight color={blueprint ? '#8ce9ff' : '#d9e6ff'} groundColor={blueprint ? '#08151e' : '#111820'} intensity={blueprint ? 0.5 : 0.36} />
+      <pointLight position={[4.8, 4.4, 4.5]} color="#ffe7c3" intensity={blueprint ? 5 : 18} distance={17} decay={2} />
+      <pointLight position={[-4.8, 3.1, 1.6]} color="#67bfff" intensity={blueprint ? 4 : 12} distance={15} decay={2} />
+      <pointLight position={[-1.8, 4.2, -6.6]} color="#9b82ff" intensity={blueprint ? 2.4 : 8} distance={15} decay={2} />
+    </>
+  )
+}
+
 function Scene({ spec, viewMode, exploded, airflow, aeroPlan, resetToken }: ViewportProps) {
   const orbit = useRef<React.ElementRef<typeof OrbitControls>>(null)
   useEffect(() => {
@@ -1287,9 +1311,10 @@ function Scene({ spec, viewMode, exploded, airflow, aeroPlan, resetToken }: View
       {!studio && <pointLight position={[-5, 3, -6]} color="#3ab4ff" intensity={1.1} />}
       {!studio && <pointLight position={[5, 2, 5]} color="#f0ad3d" intensity={0.6} />}
       {studio && <StudioStage />}
+      {!studio && <EngineeringStage blueprint={blueprint} />}
       <ProceduralVehicle spec={spec} mode={viewMode} exploded={exploded} airflow={airflow} aeroPlan={aeroPlan} />
       {!studio && <Grid
-        position={[0, 0, 0]}
+        position={[0, -0.022, 0]}
         args={[26, 26]}
         cellSize={0.5}
         cellThickness={0.45}
